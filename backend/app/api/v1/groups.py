@@ -10,7 +10,7 @@ from app.models.group import Group, GroupMember
 from app.models.list import GroceryList
 from app.models.invitation import Invitation
 from app.schemas.group import (
-    GroupCreate, GroupResponse, GroupMemberResponse,
+    GroupCreate, GroupUpdate, GroupResponse, GroupMemberResponse,
     InvitationCreate, InvitationResponse, InvitationAccept
 )
 from app.schemas.list import ListCreate, ListResponse
@@ -112,6 +112,58 @@ def get_group_details(
         member_count=len(members),
         list_count=len(group.lists)
     )
+
+@router.patch("/groups/{group_id}", response_model=GroupResponse)
+def update_group(
+    group_id: str,
+    group_in: GroupUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == current_user.id
+    ).first()
+    if not membership or membership.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only group admins can rename the group")
+    
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    group.name = group_in.name.strip()
+    db.commit()
+    db.refresh(group)
+    
+    return GroupResponse(
+        id=group.id,
+        name=group.name,
+        created_by=group.created_by,
+        created_at=group.created_at,
+        member_count=len(group.members),
+        list_count=len(group.lists)
+    )
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group(
+    group_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == current_user.id
+    ).first()
+    if not membership or membership.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only group admins can delete the group")
+        
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    db.delete(group)
+    db.commit()
+    return None
 
 @router.post("/groups/{group_id}/invitations", response_model=InvitationResponse)
 def create_invitation(

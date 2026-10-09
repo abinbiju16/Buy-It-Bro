@@ -15,6 +15,9 @@ class GroupMemberResponse(BaseModel):
 class GroupCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
 
+class GroupUpdate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+
 class GroupResponse(BaseModel):
     id: str
     name: str

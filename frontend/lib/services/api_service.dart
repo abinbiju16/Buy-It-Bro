@@ -76,6 +76,30 @@ class ApiService {
     throw Exception('Failed to load group details');
   }
 
+  Future<Group> renameGroup(String groupId, String newName) async {
+    final response = await http.patch(
+      Uri.parse('${AppConfig.baseUrl}/groups/$groupId'),
+      headers: _headers,
+      body: jsonEncode({'name': newName.trim()}),
+    );
+    if (response.statusCode == 200) {
+      return Group.fromJson(jsonDecode(response.body));
+    }
+    final error = jsonDecode(response.body);
+    throw Exception(error['detail'] ?? 'Failed to rename group');
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    final response = await http.delete(
+      Uri.parse('${AppConfig.baseUrl}/groups/$groupId'),
+      headers: _headers,
+    );
+    if (response.statusCode != 204) {
+      final error = jsonDecode(response.body);
+      throw Exception(error['detail'] ?? 'Failed to delete group');
+    }
+  }
+
   Future<String> createGroupInvitation(String groupId, {String role = 'MEMBER'}) async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}/groups/$groupId/invitations'),
@@ -147,6 +171,19 @@ class ApiService {
     if (response.statusCode != 204) {
       throw Exception('Failed to delete list');
     }
+  }
+
+  Future<GroceryList> renameList(String listId, String newTitle) async {
+    final response = await http.patch(
+      Uri.parse('${AppConfig.baseUrl}/lists/$listId'),
+      headers: _headers,
+      body: jsonEncode({'title': newTitle.trim()}),
+    );
+    if (response.statusCode == 200) {
+      return GroceryList.fromJson(jsonDecode(response.body));
+    }
+    final error = jsonDecode(response.body);
+    throw Exception(error['detail'] ?? 'Failed to rename list');
   }
 
   // --- Items Management ---

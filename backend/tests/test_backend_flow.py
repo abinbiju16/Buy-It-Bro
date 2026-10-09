@@ -124,3 +124,24 @@ def test_full_collaborative_grocery_workflow():
     assert res_alice_view.status_code == 200
     assert res_alice_view.json()["checked_count"] == 1
     assert res_alice_view.json()["items"][0]["is_checked"] is True
+
+    # 13. Alice renames the list
+    res_rename_list = client.patch(f"/api/v1/lists/{shared_list_id}", headers=headers_a, json={"title": "Weekly Mega Groceries"})
+    assert res_rename_list.status_code == 200
+    assert res_rename_list.json()["title"] == "Weekly Mega Groceries"
+
+    # 14. Alice renames the group
+    res_rename_group = client.patch(f"/api/v1/groups/{group_id}", headers=headers_a, json={"name": "Kochi Roomies VIP"})
+    assert res_rename_group.status_code == 200
+    assert res_rename_group.json()["name"] == "Kochi Roomies VIP"
+
+    # 15. Alice deletes the list
+    res_del_list = client.delete(f"/api/v1/lists/{shared_list_id}", headers=headers_a)
+    assert res_del_list.status_code == 204
+    assert client.get(f"/api/v1/lists/{shared_list_id}", headers=headers_a).status_code == 404
+
+    # 16. Alice deletes the group
+    res_del_group = client.delete(f"/api/v1/groups/{group_id}", headers=headers_a)
+    assert res_del_group.status_code == 204
+    assert client.get(f"/api/v1/groups/{group_id}", headers=headers_a).status_code == 403
+
