@@ -99,7 +99,7 @@ def get_group_details(
             group_id=m.group_id,
             user_id=m.user_id,
             role=m.role,
-            joined_at=m.joined_at,
+            joined_at=m.created_at,
             user=UserResponse.model_validate(u) if u else None
         ))
     

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/group.dart';
@@ -19,12 +20,34 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
   late Group _group;
   List<GroceryList> _groupLists = [];
   bool _loading = true;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _group = widget.group;
     _loadGroupData();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _silentPollGroup());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _silentPollGroup() async {
+    if (!mounted) return;
+    try {
+      final updatedGroup = await widget.api.getGroupDetails(_group.id);
+      final lists = await widget.api.getGroupLists(_group.id);
+      if (mounted) {
+        setState(() {
+          _group = updatedGroup;
+          _groupLists = lists;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadGroupData() async {

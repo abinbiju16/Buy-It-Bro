@@ -197,6 +197,38 @@ class ApiService {
     throw Exception('Failed to update item status');
   }
 
+  Future<ListItem> updateItemDetails({
+    required String listId,
+    required String itemId,
+    String? name,
+    double? quantity,
+    String? unit,
+    String? note,
+    bool? isChecked,
+    int? expectedVersion,
+  }) async {
+    final Map<String, dynamic> bodyData = {};
+    if (name != null) bodyData['name'] = name;
+    if (quantity != null) bodyData['quantity'] = quantity;
+    if (unit != null) bodyData['unit'] = unit;
+    if (note != null) bodyData['note'] = note;
+    if (isChecked != null) bodyData['is_checked'] = isChecked;
+    if (expectedVersion != null) bodyData['expected_version'] = expectedVersion;
+
+    final response = await http.patch(
+      Uri.parse('${AppConfig.baseUrl}/lists/$listId/items/$itemId'),
+      headers: _headers,
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode == 200) {
+      return ListItem.fromJson(jsonDecode(response.body));
+    }
+    if (response.statusCode == 409) {
+      throw Exception('Conflict: item was updated by someone else.');
+    }
+    throw Exception('Failed to update item');
+  }
+
   Future<void> deleteItem(String listId, String itemId) async {
     final response = await http.delete(
       Uri.parse('${AppConfig.baseUrl}/lists/$listId/items/$itemId'),
