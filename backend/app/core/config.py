@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     
     # SQLite local file by default, easy to switch to PostgreSQL
     DATABASE_URL: str = "sqlite:///./buyitbro.db"
+
+    @property
+    def sqlalchemy_database_uri(self) -> str:
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
     
     # Security
     SECRET_KEY: str = "buyitbro-super-secret-key-change-in-production-12345"

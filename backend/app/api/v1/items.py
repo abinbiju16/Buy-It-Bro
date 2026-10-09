@@ -54,11 +54,7 @@ def update_item(
     if item_in.expected_version is not None and item.version != item_in.expected_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "Item was updated by another member.",
-                "current_version": item.version,
-                "current_item": ListItemResponse.model_validate(item).model_dump()
-            }
+            detail="Item was updated by another member. Please refresh."
         )
         
     if item_in.name is not None:
