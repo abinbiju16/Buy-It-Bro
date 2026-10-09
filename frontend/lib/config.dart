@@ -1,7 +1,8 @@
 class AppConfig {
-  // Live Cloudflare Global Public URL:
-  static const String cloudflareUrl = "https://lunch-purposes-rays-disclaimers.trycloudflare.com/api/v1";
+  // PythonAnywhere 24/7 Cloud URL (Always active, no laptop required):
+  static const String pythonAnywhereUrl = "https://abinbiju.pythonanywhere.com/api/v1";
 
-  // Connects to your live backend over the global internet from any phone:
-  static String get baseUrl => cloudflareUrl;
+  // Connects to your live 24/7 cloud backend over the internet:
+  static String get baseUrl => pythonAnywhereUrl;
 }
+
