@@ -79,11 +79,29 @@ class _AuthScreenState extends State<AuthScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // App Icon and Title
-                      Icon(
-                        Icons.shopping_cart_checkout_rounded,
-                        size: 56,
-                        color: theme.colorScheme.primary,
+                      // App Logo and Title
+                      Center(
+                        child: Container(
+                          width: 84,
+                          height: 84,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withAlpha(50),
+                                blurRadius: 18,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(22),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(

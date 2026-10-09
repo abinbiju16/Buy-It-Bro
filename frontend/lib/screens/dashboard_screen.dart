@@ -26,22 +26,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = widget.authService.currentUser;
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withAlpha(25),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.shopping_bag_rounded,
-                color: theme.colorScheme.primary,
-                size: 22,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                'assets/images/logo.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
               ),
             ),
             const SizedBox(width: 12),
