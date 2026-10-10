@@ -229,7 +229,7 @@ class ApiService {
       return ListItem.fromJson(jsonDecode(response.body));
     }
     if (response.statusCode == 409) {
-      throw Exception('Conflict: item was updated by someone else.');
+      throw const ConflictException();
     }
     throw Exception('Failed to update item status');
   }
@@ -261,7 +261,7 @@ class ApiService {
       return ListItem.fromJson(jsonDecode(response.body));
     }
     if (response.statusCode == 409) {
-      throw Exception('Conflict: item was updated by someone else.');
+      throw const ConflictException();
     }
     throw Exception('Failed to update item');
   }
@@ -275,4 +275,12 @@ class ApiService {
       throw Exception('Failed to delete item');
     }
   }
+}
+
+class ConflictException implements Exception {
+  final String message;
+  const ConflictException([this.message = 'Item was updated by someone else.']);
+
+  @override
+  String toString() => message;
 }

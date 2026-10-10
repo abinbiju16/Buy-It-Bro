@@ -21,6 +21,13 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
   Timer? _pollTimer;
   bool _isLiveSyncing = false;
 
+  // Concurrency & Debounce controls
+  final Map<String, Timer> _quantityDebounceTimers = {};
+  final Set<String> _syncingItemIds = {};
+  final Map<String, double> _targetQuantities = {};
+  final Map<String, double> _originalQuantities = {};
+  final Set<String> _pendingQuickAddNames = {};
+
   final List<String> _commonUnits = [
     'pieces',
     'packets',
@@ -42,6 +49,10 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    for (final timer in _quantityDebounceTimers.values) {
+      timer.cancel();
+    }
+    _quantityDebounceTimers.clear();
     super.dispose();
   }
 
@@ -57,6 +68,19 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       final updated = await widget.api.getList(_currentList.id);
       if (mounted) {
         setState(() {
+          // Do not overwrite items that are actively debouncing or syncing locally
+          for (final updatedItem in updated.items) {
+            if (_syncingItemIds.contains(updatedItem.id) ||
+                _quantityDebounceTimers.containsKey(updatedItem.id) ||
+                _targetQuantities.containsKey(updatedItem.id)) {
+              final localItem = _currentList.items.firstWhere(
+                (i) => i.id == updatedItem.id,
+                orElse: () => updatedItem,
+              );
+              updatedItem.quantity = localItem.quantity;
+              updatedItem.version = localItem.version;
+            }
+          }
           _currentList = updated;
           _isLiveSyncing = true;
         });
@@ -88,6 +112,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
   }
 
   Future<void> _toggleItem(ListItem item) async {
+    if (_syncingItemIds.contains(item.id)) return;
+    _syncingItemIds.add(item.id);
+
     final originalState = item.isChecked;
     setState(() {
       item.isChecked = !item.isChecked;
@@ -100,51 +127,132 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         isChecked: item.isChecked,
         expectedVersion: item.version,
       );
-      setState(() {
-        item.version = updated.version;
-      });
+      if (mounted) {
+        setState(() {
+          item.version = updated.version;
+        });
+      }
+    } on ConflictException catch (_) {
+      try {
+        final refreshedList = await widget.api.getList(_currentList.id);
+        final freshItem = refreshedList.items.firstWhere(
+          (i) => i.id == item.id,
+          orElse: () => item,
+        );
+        final retried = await widget.api.toggleItemChecked(
+          listId: _currentList.id,
+          itemId: item.id,
+          isChecked: item.isChecked,
+          expectedVersion: freshItem.version,
+        );
+        if (mounted) {
+          setState(() {
+            item.version = retried.version;
+          });
+        }
+      } catch (_) {
+        setState(() {
+          item.isChecked = originalState;
+        });
+        _refreshList();
+      }
     } catch (e) {
       setState(() {
         item.isChecked = originalState;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating item: $e')),
+          SnackBar(content: Text('Error updating item: ${e.toString().replaceAll("Exception: ", "")}')),
         );
         _refreshList();
       }
+    } finally {
+      _syncingItemIds.remove(item.id);
     }
   }
 
-  Future<void> _adjustQuantity(ListItem item, double delta) async {
+  void _adjustQuantity(ListItem item, double delta) {
     final newQty = item.quantity + delta;
     if (newQty <= 0) return;
 
-    final oldQty = item.quantity;
+    _originalQuantities.putIfAbsent(item.id, () => item.quantity);
+
+    // Instant local UI response
     setState(() {
       item.quantity = newQty;
     });
+    _targetQuantities[item.id] = newQty;
+
+    // Debounce network sync so rapid taps batch cleanly into a single call
+    _quantityDebounceTimers[item.id]?.cancel();
+    _quantityDebounceTimers[item.id] = Timer(const Duration(milliseconds: 350), () {
+      _quantityDebounceTimers.remove(item.id);
+      _syncItemQuantity(item);
+    });
+  }
+
+  Future<void> _syncItemQuantity(ListItem item) async {
+    if (!mounted) return;
+    if (_syncingItemIds.contains(item.id)) return;
+
+    _syncingItemIds.add(item.id);
 
     try {
-      final updated = await widget.api.updateItemDetails(
-        listId: _currentList.id,
-        itemId: item.id,
-        quantity: newQty,
-        expectedVersion: item.version,
-      );
-      setState(() {
-        item.version = updated.version;
-      });
-    } catch (e) {
-      setState(() {
-        item.quantity = oldQty;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not update quantity: $e')),
-        );
-        _refreshList();
+      while (mounted && _targetQuantities.containsKey(item.id)) {
+        final targetQty = _targetQuantities[item.id]!;
+
+        try {
+          final updated = await widget.api.updateItemDetails(
+            listId: _currentList.id,
+            itemId: item.id,
+            quantity: targetQty,
+            expectedVersion: item.version,
+          );
+          if (mounted) {
+            setState(() {
+              item.version = updated.version;
+            });
+          }
+          if (_targetQuantities[item.id] == targetQty) {
+            _targetQuantities.remove(item.id);
+            _originalQuantities.remove(item.id);
+            break;
+          }
+        } on ConflictException catch (_) {
+          // Automatic conflict resolution: retrieve latest server version and retry
+          try {
+            final refreshedList = await widget.api.getList(_currentList.id);
+            final freshItem = refreshedList.items.firstWhere(
+              (i) => i.id == item.id,
+              orElse: () => item,
+            );
+            if (freshItem.id == item.id) {
+              item.version = freshItem.version;
+              continue;
+            } else {
+              break;
+            }
+          } catch (_) {
+            break;
+          }
+        } catch (e) {
+          final oldQty = _originalQuantities.remove(item.id);
+          _targetQuantities.remove(item.id);
+          if (oldQty != null && mounted) {
+            setState(() {
+              item.quantity = oldQty;
+            });
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not update quantity: ${e.toString().replaceAll("Exception: ", "")}')),
+            );
+          }
+          break;
+        }
       }
+    } finally {
+      _syncingItemIds.remove(item.id);
     }
   }
 
@@ -157,23 +265,26 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete item: $e')),
+          SnackBar(content: Text('Failed to delete item: ${e.toString().replaceAll("Exception: ", "")}')),
         );
       }
     }
   }
 
   Future<void> _quickAddItem(PredefinedGroceryItem preItem) async {
+    final normalizedName = preItem.name.trim().toLowerCase();
+
     // Check if item already exists
     final existingIndex = _currentList.items.indexWhere(
-      (i) => i.name.trim().toLowerCase() == preItem.name.trim().toLowerCase(),
+      (i) => i.name.trim().toLowerCase() == normalizedName,
     );
 
     if (existingIndex != -1) {
-      // Item already in list -> increment its quantity!
+      // Item already in list -> increment its quantity via debounced adjuster!
       final existing = _currentList.items[existingIndex];
-      await _adjustQuantity(existing, preItem.defaultQuantity);
+      _adjustQuantity(existing, preItem.defaultQuantity);
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(milliseconds: 1400),
@@ -185,6 +296,10 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       }
       return;
     }
+
+    // Prevent duplicate rapid taps creating multiple items
+    if (_pendingQuickAddNames.contains(normalizedName)) return;
+    _pendingQuickAddNames.add(normalizedName);
 
     // Add new item
     try {
@@ -198,6 +313,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         setState(() {
           _currentList.items.add(newItem);
         });
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(milliseconds: 1200),
@@ -208,9 +324,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add item: $e')),
+          SnackBar(content: Text('Failed to add item: ${e.toString().replaceAll("Exception: ", "")}')),
         );
       }
+    } finally {
+      _pendingQuickAddNames.remove(normalizedName);
     }
   }
 
